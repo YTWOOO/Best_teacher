@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Monte uma cartela de bingo com os seus itens, jogue e mande o link para outras pessoas jogarem.">
+<title>Bingo, monte e jogue</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2313202E'/%3E%3Cg fill='none' stroke='%23EDF0F3' stroke-width='1.5'%3E%3Cpath d='M5 11.5h22M5 20.5h22M11.5 5v22M20.5 5v22'/%3E%3C/g%3E%3Crect x='12.5' y='12.5' width='7' height='7' fill='%23FF8A5C'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: folha de desenho técnico sobre papel quadriculado. Uma coluna estreita, pensada para celular:
+   cabeçalho com título grande, conteúdo da tela (lista, formulário ou cartela) e rodapé com a nota de armazenamento. */
+:root {
+  --paper: #EDF0F3;
+  --grid: #DCE2E8;
+  --ink: #13202E;
+  --ink-soft: #4B5A69;
+  --line: #5E6E7F;
+  --cell: #FAFBFC;
+  --accent: #C93A16;
+  --on-accent: #FFFFFF;
+  --tint: #F6D9CE;
+  --font-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --font-body: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sheet: 30rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0E1620;
+    --grid: #17222E;
+    --ink: #E7EDF3;
+    --ink-soft: #9AA9B8;
+    --line: #5A6B7D;
+    --cell: #162230;
+    --accent: #FF8A5C;
+    --on-accent: #1B0F0A;
+    --tint: #3B2419;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 20px 20px;
+  color: var(--ink);
+  font: 500 16px/1.4 var(--font-body);
+}
+[hidden] { display: none !important; }
+sub { font-size: .75em; line-height: 0; }
+button, input, textarea { font: inherit; color: inherit; }
+
+.sheet {
+  max-width: var(--sheet);
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 12px 40px;
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(40px, env(safe-area-inset-bottom, 0px));
+}
+
+.back {
+  display: inline-flex; align-items: center; min-height: 44px;
+  font: 600 12px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-soft); text-decoration: none;
+}
+.back:hover { color: var(--ink); }
+
+/* Cabeçalho */
+.titlerow { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+h1 {
+  margin: 0; display: grid; gap: 4px; min-width: 0;
+  font-family: var(--font-display); text-transform: uppercase; color: var(--ink); overflow-wrap: anywhere;
+}
+h1 .big { font-weight: 900; font-size: clamp(64px, 20vw, 100px); line-height: .84; letter-spacing: .01em; }
+h1.solo .big { font-size: clamp(40px, 12vw, 64px); line-height: .92; text-wrap: balance; }
+h1 .sub { font-weight: 800; font-size: clamp(22px, 7vw, 32px); line-height: 1; letter-spacing: .14em; text-wrap: balance; }
+.beamwrap { flex: none; max-width: 100%; }
+.beam { display: block; max-width: 100%; height: auto; }
+.beam .s { stroke: var(--ink); fill: none; stroke-width: 2; stroke-linejoin: round; }
+.beam .f { fill: var(--ink); stroke: none; }
+.beam .v { stroke: var(--accent); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.beam text { fill: var(--accent); font: 600 12px var(--font-mono); }
+.lede { margin: 14px 0 0; max-width: 36ch; color: var(--ink-soft); font-size: 16px; line-height: 1.4; }
+
+/* Botões */
+.btn {
+  display: inline-grid; place-items: center; min-height: 50px; padding: 0 14px;
+  border-radius: 2px; border: 2px solid var(--ink); background: transparent; color: var(--ink);
+  font: 700 15px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase; text-decoration: none; text-align: center;
+  cursor: pointer; touch-action: manipulation;
+}
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn.armed { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.btn:focus-visible, .linkbtn:focus-visible, .back:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; }
+.row > .btn { flex: 1 1 8rem; }
+.linkbtn {
+  min-height: 44px; padding: 0 4px; border: 0; background: none; cursor: pointer;
+  font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; touch-action: manipulation;
+}
+.linkbtn:hover { color: var(--ink); }
+.linkbtn.armed { color: var(--accent); font-weight: 600; }
+
+/* Home: estante de bingos */
+.toolbar { margin-top: 20px; display: grid; }
+.shelf { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 14px; }
+.card { background: var(--cell); border: 2px solid var(--ink); padding: 14px; display: grid; gap: 12px; }
+.card h2 { margin: 0; font: 900 32px/.95 var(--font-display); text-transform: uppercase; overflow-wrap: anywhere; text-wrap: balance; }
+.card .info { margin: 0; font: 500 12px/1.3 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); }
+.card .more { display: flex; gap: 14px; flex-wrap: wrap; }
+.empty { margin-top: 20px; padding: 18px 14px; border: 2px dashed var(--line); color: var(--ink-soft); }
+.empty p { margin: 0; }
+
+/* Formulário */
+.form { margin-top: 20px; display: grid; gap: 22px; }
+.field { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.field > label, .field > legend {
+  padding: 0; font: 600 11px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft);
+}
+input[type="text"], textarea {
+  width: 100%; min-width: 0; padding: 12px; border-radius: 2px;
+  border: 2px solid var(--ink); background: var(--cell); color: var(--ink);
+  font: 500 17px/1.35 var(--font-body);
+}
+textarea { min-height: 220px; resize: vertical; }
+input[type="text"]:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+::placeholder { color: var(--ink-soft); opacity: .8; }
+.segs { display: grid; grid-template-columns: repeat(3, 1fr); border: 2px solid var(--ink); }
+.seg { position: relative; display: block; }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg span { display: grid; place-items: center; min-height: 50px; background: var(--cell); color: var(--ink); font: 700 17px/1 var(--font-body); letter-spacing: .06em; }
+.seg + .seg span { border-left: 2px solid var(--ink); }
+.seg input:checked + span { background: var(--ink); color: var(--paper); }
+.seg input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: -6px; }
+.check { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; cursor: pointer; }
+.check input { flex: none; width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--accent); }
+.check span { min-width: 0; line-height: 1.35; }
+.check small { display: block; margin-top: 3px; font: 500 12.5px/1.35 var(--font-mono); color: var(--ink-soft); }
+.check.off { opacity: .55; cursor: not-allowed; }
+.status { margin: 0; font: 500 12.5px/1.4 var(--font-mono); color: var(--ink-soft); }
+.status.bad { color: var(--accent); font-weight: 600; }
+.form .row { margin-top: 2px; }
+
+/* Meta e tabuleiro */
+.meta {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
+  margin-block: 20px 8px; font: 500 12px/1 var(--font-mono);
+  letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft);
+}
+.meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.count { display: grid; gap: 7px; }
+.bar { width: min(150px, 42vw); height: 8px; border: 1.5px solid var(--line); }
+.bar i { display: block; height: 100%; width: calc(var(--p, 0) * 1%); background: var(--accent); transition: width .2s; }
+
+.board {
+  display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 2px;
+  background: var(--line); border: 2px solid var(--ink);
+}
+.cell {
+  position: relative; appearance: none; border: 0; border-radius: 0; margin: 0;
+  min-width: 0; aspect-ratio: 1 / 1;
+  display: grid; place-items: center;
+  padding: 22px 7px 8px;
+  background: var(--cell); color: var(--ink);
+  font: 600 clamp(15px, 4.6vw, 21px)/1.12 var(--font-body);
+  text-align: center; cursor: pointer;
+  user-select: none; -webkit-user-select: none; touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s, color .15s, transform .08s;
+}
+.n4 .cell { padding: 8px 5px; font-size: clamp(12px, 3.5vw, 17px); }
+.n5 .cell { padding: 6px 3px; font-size: clamp(10.5px, 2.8vw, 14px); line-height: 1.1; }
+.cell:active { transform: scale(.97); }
+.cell:focus-visible { outline: 3px solid var(--ink); outline-offset: -5px; }
+.txt { max-width: 100%; text-wrap: balance; overflow-wrap: break-word; hyphens: auto; }
+.cell.big { padding-top: 16px; }
+.cell.big .txt { font: 900 clamp(56px, 18vw, 88px)/.85 var(--font-display); letter-spacing: .01em; }
+.n4 .cell.big { padding: 8px 5px; }
+.n4 .cell.big .txt { font-size: clamp(36px, 11vw, 60px); }
+.n5 .cell.big { padding: 6px 3px; }
+.n5 .cell.big .txt { font-size: clamp(28px, 8vw, 44px); }
+.cell.free .txt { font: 800 clamp(15px, 4vw, 22px)/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase; }
+.cell.free { cursor: default; }
+.coord { position: absolute; top: 7px; left: 8px; font: 500 10px/1 var(--font-mono); letter-spacing: .06em; color: var(--ink-soft); }
+.tick { position: absolute; top: 5px; right: 5px; width: 19px; height: 19px; opacity: 0; transform: scale(.5); transition: opacity .15s, transform .15s; }
+.n4 .tick, .n5 .tick { top: 3px; right: 3px; width: 14px; height: 14px; }
+.tick circle { fill: var(--accent); }
+.tick path { fill: none; stroke: var(--on-accent); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.cell[aria-pressed="true"] { background: var(--tint); }
+.cell[aria-pressed="true"] .tick { opacity: 1; transform: none; }
+.cell.line { background: var(--accent); color: var(--on-accent); }
+.cell.line .coord { color: var(--on-accent); opacity: .8; }
+.cell.line .tick circle { fill: var(--on-accent); }
+.cell.line .tick path { stroke: var(--accent); }
+.board.dealing .cell { animation: deal .5s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(var(--i) * 35ms); }
+@keyframes deal { from { transform: translateY(-16px) rotate(-5deg); opacity: 0; } }
+
+.result {
+  margin-top: 14px; min-height: 78px;
+  display: grid; align-content: center; gap: 4px;
+  padding: 10px 14px; border: 2px dashed var(--line); color: var(--ink-soft);
+}
+.result.win { border: 2px solid var(--accent); background: var(--accent); color: var(--on-accent); }
+.result .kicker { font: 900 36px/.95 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+.result .detail { font: 500 12.5px/1.35 var(--font-mono); }
+.result.pop { animation: pop .38s ease-out; }
+@keyframes pop { 0% { transform: scale(.96); } 60% { transform: scale(1.02); } 100% { transform: none; } }
+
+.actions { display: grid; gap: 10px; margin-top: 12px; }
+.actions .row > .btn { flex: 1 1 9rem; }
+.hint { margin: 10px 0 0; font: 500 12.5px/1.35 var(--font-mono); color: var(--ink-soft); }
+
+.legend { margin-top: 28px; border-top: 2px solid var(--ink); padding-top: 12px; }
+.legend h2 { margin: 0 0 6px; font: 600 11px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+.legend dl { display: grid; grid-template-columns: 1fr auto; margin: 0; }
+.legend dt, .legend dd { margin: 0; padding-block: 8px; border-bottom: 1px dashed var(--line); }
+.legend dt { font-size: 16px; }
+.legend dd { font: 500 14px/1.4 var(--font-mono); text-align: right; padding-left: 16px; }
+
+/* Diálogo e aviso */
+dialog {
+  width: min(28rem, calc(100% - 32px)); padding: 18px; border-radius: 0;
+  border: 2px solid var(--ink); background: var(--cell); color: var(--ink);
+}
+dialog::backdrop { background: rgba(10, 18, 28, .6); }
+dialog h2 { margin: 0 0 8px; font: 900 30px/.95 var(--font-display); text-transform: uppercase; }
+dialog p { margin: 0 0 14px; color: var(--ink-soft); }
+dialog input[type="text"] { font: 500 14px/1.3 var(--font-mono); margin-bottom: 12px; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 32px); padding: 12px 16px;
+  background: var(--ink); color: var(--paper);
+  font: 600 13px/1.3 var(--font-mono); text-align: center;
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.foot { margin-top: 36px; padding-top: 12px; border-top: 1px dashed var(--line); font: 500 12px/1.5 var(--font-mono); color: var(--ink-soft); }
+.foot p { margin: 0; max-width: 46ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  .board.dealing .cell, .result.pop { animation: none; }
+  .cell, .tick, .bar i, .toast { transition: none; }
+}
+</style>
+</head>
+<body>
+<main class="sheet" id="app"><noscript>Este site precisa de JavaScript para funcionar.</noscript></main>
+<dialog id="share" aria-labelledby="share-h"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Dados e utilidades ---------- */
+  var LIB_KEY = "bingo-lib-v1";
+  var MAX_ITEMS = 100, MAX_LEN = 80, MAX_TITLE = 40;
+
+  var ESTATICA = {
+    title: "Bingo de Estática", size: 3, free: false, eq: true,
+    items: ["Camisa geek", "Ped chega atrasado", "Ninguém pediu pra calcular isso", "Camisa de mat/física",
+            "Piada da matéria", "Quebrar o giz", "67", "Piada geral", "Mais de 5 exemplos"]
+  };
+
+  var CHECK = '<svg class="tick" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="10"/><path d="M5.5 10.5 L8.8 13.6 L14.5 6.8"/></svg>';
+  var BEAM = '<svg class="beam" viewBox="0 0 128 66" width="128" height="66" aria-hidden="true" focusable="false">' +
+    '<rect class="f" x="8" y="30" width="112" height="7"/><path class="s" d="M26 37 L16 56 H36 Z"/>' +
+    '<path class="s" d="M102 37 L94 50 H110 Z"/><circle class="s" cx="98" cy="53" r="3"/><circle class="s" cx="106" cy="53" r="3"/>' +
+    '<path class="s" d="M8 56 H44 M86 56 H120"/><path class="v" d="M64 4 V26 M57 18 L64 28 L71 18"/><text x="73" y="15">F</text></svg>';
+  var EQ = { row: "ΣF<sub>x</sub> = 0", col: "ΣF<sub>y</sub> = 0", diag: "ΣM = 0" };
+
+  var root = document.getElementById("app");
+  var dlg = document.getElementById("share");
+  var toastEl = document.getElementById("toast");
+
+  function h(tag, props) {
+    var el = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach(function (k) {
+        var v = props[k];
+        if (v == null || v === false) return;
+        if (k === "class") el.className = v;
+        else if (k === "text") el.textContent = v;
+        else if (k === "html") el.innerHTML = v; /* só recebe constantes deste arquivo, nunca texto do usuário */
+        else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), v);
+        else if (v === true) el.setAttribute(k, "");
+        else el.setAttribute(k, v);
+      });
+    }
+    for (var i = 2; i < arguments.length; i++) {
+      var kid = arguments[i];
+      if (kid == null || kid === false) continue;
+      if (Array.isArray(kid)) kid.forEach(function (k) { if (k) el.append(k); });
+      else el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    }
+    return el;
+  }
+
+  var toastTimer = 0;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2400);
+  }
+
+  function cleanItems(list) {
+    var seen = {}, out = [];
+    for (var i = 0; i < list.length; i++) {
+      var t = String(list[i]).replace(/\s+/g, " ").trim().slice(0, MAX_LEN);
+      if (!t) continue;
+      var k = t.toLowerCase();
+      if (seen[k]) continue;
+      seen[k] = true;
+      out.push(t);
+      if (out.length >= MAX_ITEMS) break;
+    }
+    return out;
+  }
+
+  function sanitize(o) {
+    if (!o || typeof o !== "object") return null;
+    var size = Number(o.size);
+    if (size !== 3 && size !== 4 && size !== 5) return null;
+    if (!Array.isArray(o.items)) return null;
+    var free = !!o.free && size % 2 === 1;
+    var items = cleanItems(o.items);
+    if (items.length < size * size - (free ? 1 : 0)) return null;
+    var title = String(o.title == null ? "" : o.title).replace(/\s+/g, " ").trim().slice(0, MAX_TITLE) || "Meu bingo";
+    return { title: title, size: size, free: free, eq: !!o.eq, items: items };
+  }
+
+  function fingerprint(b) {
+    var s = JSON.stringify([b.title, b.size, b.free ? 1 : 0, b.eq ? 1 : 0, b.items]);
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+
+  function titleParts(t) {
+    var w = t.trim().split(/\s+/);
+    if (w.length > 1 && w[0].length <= 8) return { big: w[0], sub: w.slice(1).join(" ") };
+    return { big: t, sub: "", solo: true };
+  }
+
+  /* ---------- Sorteio e linhas ---------- */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffledIdx(n, seed) {
+    var r = mulberry32(seed), a = [];
+    for (var i = 0; i < n; i++) a.push(i);
+    for (var j = n - 1; j > 0; j--) {
+      var k = Math.floor(r() * (j + 1));
+      var tmp = a[j]; a[j] = a[k]; a[k] = tmp;
+    }
+    return a;
+  }
+  function rand6() {
+    var n;
+    try { var a = new Uint32Array(1); crypto.getRandomValues(a); n = a[0]; }
+    catch (e) { n = Math.floor(Math.random() * 4294967296); }
+    return 100000 + (n % 900000);
+  }
+  function linesFor(N) {
+    var L = [], r, c, i;
+    for (r = 0; r < N; r++) { var row = []; for (c = 0; c < N; c++) row.push(r * N + c); L.push({ kind: "row", cells: row }); }
+    for (c = 0; c < N; c++) { var col = []; for (r = 0; r < N; r++) col.push(r * N + c); L.push({ kind: "col", cells: col }); }
+    var d1 = [], d2 = [];
+    for (i = 0; i < N; i++) { d1.push(i * N + i); d2.push(i * N + (N - 1 - i)); }
+    L.push({ kind: "diag", cells: d1 });
+    L.push({ kind: "diag", cells: d2 });
+    return L;
+  }
+
+  /* ---------- Link de compartilhar ---------- */
+  function b64uEncode(bytes) {
+    var s = "";
+    for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function b64uDecode(str) {
+    str = str.replace(/-/g, "+").replace(/_/g, "/");
+    while (str.length % 4) str += "=";
+    var bin = atob(str), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function pipeBytes(bytes, stream) {
+    var w = stream.writable.getWriter();
+    w.write(bytes).catch(function () {});
+    w.close().catch(function () {});
+    return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+  }
+  async function encodeBingo(b) {
+    var json = JSON.stringify([b.title, b.size, (b.free ? 1 : 0) | (b.eq ? 2 : 0), b.items]);
+    var bytes = new TextEncoder().encode(json);
+    var best = "1." + b64uEncode(bytes);
+    if (typeof CompressionStream === "function") {
+      try {
+        var comp = "2." + b64uEncode(await pipeBytes(bytes, new CompressionStream("deflate-raw")));
+        if (comp.length < best.length) best = comp;
+      } catch (e) {}
+    }
+    return best;
+  }
+  async function decodeBingo(payload) {
+    try {
+      var kind = payload.slice(0, 2), data = payload.slice(2);
+      if (!/^[A-Za-z0-9_-]+$/.test(data) || data.length > 20000) return null;
+      var bytes = b64uDecode(data);
+      if (kind === "2.") {
+        if (typeof DecompressionStream !== "function") return null;
+        bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
+      } else if (kind !== "1.") return null;
+      var arr = JSON.parse(new TextDecoder().decode(bytes));
+      if (!Array.isArray(arr)) return null;
+      var flags = Number(arr[2]) || 0;
+      return sanitize({ title: arr[0], size: arr[1], free: flags & 1, eq: flags & 2, items: arr[3] });
+    } catch (e) { return null; }
+  }
+  function shareUrl(payload) { return location.href.split("#")[0] + "#/b/" + payload; }
+
+  /* ---------- Armazenamento local ---------- */
+  var memLib = null;
+  function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function defaultLib() { return [Object.assign({ id: "estatica" }, ESTATICA)]; }
+  function readLib() {
+    try {
+      var raw = localStorage.getItem(LIB_KEY);
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && Array.isArray(o.bingos)) {
+          return o.bingos.map(function (b) {
+            var s = sanitize(b);
+            return s ? Object.assign(s, { id: String(b.id) }) : null;
+          }).filter(Boolean);
+        }
+      } else {
+        var seed = defaultLib();
+        writeLib(seed);
+        return seed;
+      }
+    } catch (e) {}
+    return memLib || (memLib = defaultLib());
+  }
+  function writeLib(list) {
+    memLib = list;
+    try { localStorage.setItem(LIB_KEY, JSON.stringify({ bingos: list })); } catch (e) {}
+  }
+  function loadPlay(fp, total) {
+    try {
+      var s = JSON.parse(localStorage.getItem("bingo-play-" + fp) || "null");
+      if (s && Number.isInteger(s.seed) && Array.isArray(s.marks) && s.marks.length === total) return s;
+    } catch (e) {}
+    return null;
+  }
+  function savePlay(fp, seed, marks) {
+    try { localStorage.setItem("bingo-play-" + fp, JSON.stringify({ seed: seed, marks: marks })); } catch (e) {}
+  }
+
+  /* ---------- Estrutura comum das telas ---------- */
+  function footer() {
+    return h("footer", { class: "foot" },
+      h("p", { text: "Os bingos ficam salvos neste navegador. O link de compartilhar leva o bingo inteiro dentro dele, sem servidor e sem conta." }));
+  }
+  function page() {
+    var nodes = Array.prototype.slice.call(arguments).filter(Boolean);
+    nodes.push(footer());
+    root.replaceChildren.apply(root, nodes);
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+  function backLink() { return h("a", { class: "back", href: "#/" }, "← Meus bingos"); }
+  function titleBlock(title, withBeam, lede) {
+    var tp = titleParts(title);
+    return h("header", null,
+      h("div", { class: "titlerow" },
+        h("h1", { class: tp.solo ? "solo" : "" },
+          h("span", { class: "big", text: tp.big }),
+          tp.sub ? " " : null,
+          tp.sub ? h("span", { class: "sub", text: tp.sub }) : null),
+        withBeam ? h("div", { class: "beamwrap", html: BEAM }) : null),
+      lede ? h("p", { class: "lede", text: lede }) : null);
+  }
+  function setSheet(N) { root.style.setProperty("--sheet", N === 5 ? "38rem" : N === 4 ? "34rem" : "30rem"); }
+
+  /* ---------- Compartilhar ---------- */
+  function closeDialog() {
+    if (!dlg.open && !dlg.hasAttribute("open")) return;
+    if (typeof dlg.close === "function") dlg.close(); else dlg.removeAttribute("open");
+  }
+  async function openShare(b) {
+    var payload = await encodeBingo(b);
+    var url = shareUrl(payload);
+    var input = h("input", { type: "text", readonly: true, value: url, "aria-label": "Link do bingo" });
+    input.addEventListener("focus", function () { input.select(); });
+    var copy = h("button", { type: "button", class: "btn primary", text: "Copiar link", onclick: async function () {
+      try { await navigator.clipboard.writeText(url); toast("Link copiado"); }
+      catch (e) { input.focus(); input.select(); toast("Selecionado. Copie o link."); }
+    } });
+    var kids = [copy];
+    if (typeof navigator.share === "function") {
+      kids.push(h("button", { type: "button", class: "btn", text: "Enviar…", onclick: function () {
+        navigator.share({ title: b.title, text: "Jogue o bingo " + b.title, url: url }).catch(function () {});
+      } }));
+    }
+    kids.push(h("button", { type: "button", class: "btn", text: "Fechar", onclick: closeDialog }));
+    dlg.replaceChildren(
+      h("h2", { id: "share-h", text: "Compartilhar bingo" }),
+      h("p", { text: "Quem abrir este link joga “" + b.title + "” com uma cartela própria. Não precisa de conta." }),
+      input,
+      h("div", { class: "row" }, kids));
+    if (typeof dlg.showModal === "function") { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute("open", "");
+  }
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) closeDialog(); });
+
+  /* ---------- Tela: início ---------- */
+  function viewHome() {
+    document.title = "Bingo, monte e jogue";
+    setSheet(3);
+    var lib = readLib();
+
+    function armable(btn, label, action) {
+      var timer = 0;
+      btn.addEventListener("click", function () {
+        if (btn.classList.contains("armed")) { clearTimeout(timer); action(); return; }
+        btn.classList.add("armed");
+        btn.textContent = "Confirmar?";
+        timer = setTimeout(function () { btn.classList.remove("armed"); btn.textContent = label; }, 4000);
+      });
+    }
+
+    function shelfItem(b) {
+      var dup = h("button", { type: "button", class: "linkbtn", text: "Duplicar", onclick: function () {
+        var copy = Object.assign({}, b, { id: newId(), title: (b.title + " (cópia)").slice(0, MAX_TITLE) });
+        var list = readLib(), at = list.findIndex(function (x) { return x.id === b.id; });
+        list.splice(at + 1, 0, copy);
+        writeLib(list);
+        toast("Bingo duplicado");
+        viewHome();
+      } });
+      var del = h("button", { type: "button", class: "linkbtn", text: "Excluir" });
+      armable(del, "Excluir", function () {
+        try { localStorage.removeItem("bingo-play-" + fingerprint(b)); } catch (e) {}
+        writeLib(readLib().filter(function (x) { return x.id !== b.id; }));
+        toast("Bingo excluído");
+        viewHome();
+      });
+      var info = b.size + "×" + b.size + " · " + b.items.length + (b.items.length === 1 ? " item" : " itens") + (b.free ? " · centro livre" : "");
+      return h("li", { class: "card" },
+        h("h2", { text: b.title }),
+        h("p", { class: "info", text: info }),
+        h("div", { class: "row" },
+          h("a", { class: "btn primary", href: "#/jogar/" + b.id, text: "Jogar" }),
+          h("button", { type: "button", class: "btn", text: "Compartilhar", onclick: function () { openShare(b); } }),
+          h("a", { class: "btn", href: "#/editar/" + b.id, text: "Editar" })),
+        h("div", { class: "more" }, dup, del));
+    }
+
+    page(
+      titleBlock("Bingo monte e jogue", true, "Crie uma cartela com os seus itens, jogue e mande o link para quem quiser jogar também."),
+      h("div", { class: "toolbar" }, h("a", { class: "btn primary", href: "#/novo", text: "Novo bingo" })),
+      lib.length
+        ? h("ul", { class: "shelf" }, lib.map(shelfItem))
+        : h("div", { class: "empty" }, h("p", { text: "Nenhum bingo por aqui. Toque em Novo bingo para criar o primeiro." })));
+  }
+
+  /* ---------- Tela: editor ---------- */
+  function viewEditor(id) {
+    var existing = id ? readLib().find(function (x) { return x.id === id; }) : null;
+    if (id && !existing) return viewMissing();
+    document.title = existing ? "Editar bingo" : "Novo bingo";
+    setSheet(3);
+
+    var d = existing
+      ? { title: existing.title, size: existing.size, free: existing.free, eq: existing.eq, text: existing.items.join("\n") }
+      : { title: "", size: 3, free: false, eq: false, text: "" };
+
+    var titleInput = h("input", { type: "text", id: "f-title", maxlength: MAX_TITLE, value: d.title, placeholder: "Meu bingo", autocomplete: "off" });
+    var sizeRadios = [3, 4, 5].map(function (n) {
+      var r = h("input", { type: "radio", name: "size", value: n });
+      if (n === d.size) r.checked = true;
+      r.addEventListener("change", function () { d.size = n; refresh(); });
+      return h("label", { class: "seg" }, r, h("span", { text: n + "×" + n }));
+    });
+    var freeBox = h("input", { type: "checkbox", id: "f-free" });
+    freeBox.checked = d.free;
+    freeBox.addEventListener("change", function () { d.free = freeBox.checked; refresh(); });
+    var freeLabel = h("label", { class: "check" }, freeBox,
+      h("span", null, "Quadrado livre no centro", h("small", { text: "Já vem marcado. Só em 3×3 e 5×5." })));
+    var eqBox = h("input", { type: "checkbox", id: "f-eq" });
+    eqBox.checked = d.eq;
+    eqBox.addEventListener("change", function () { d.eq = eqBox.checked; });
+    var eqLabel = h("label", { class: "check" }, eqBox,
+      h("span", null, "Modo Estática", h("small", { text: "Mostra ΣF = 0 e ΣM = 0 quando alguém fecha uma linha." })));
+    var ta = h("textarea", { id: "f-items", spellcheck: "true",
+      placeholder: "Camisa geek\nPed chega atrasado\nQuebrar o giz\nPiada da matéria\n…" });
+    ta.value = d.text;
+    ta.addEventListener("input", refresh);
+    var status = h("p", { class: "status", id: "f-status" });
+    var save = h("button", { type: "button", class: "btn primary", text: "Salvar e jogar" });
+
+    function refresh() {
+      if (d.size % 2 === 0) { d.free = false; freeBox.checked = false; }
+      freeBox.disabled = d.size % 2 === 0;
+      freeLabel.classList.toggle("off", freeBox.disabled);
+      var items = cleanItems(ta.value.split(/\r?\n/));
+      var need = d.size * d.size - (d.free ? 1 : 0);
+      var n = items.length;
+      var ok = n >= need;
+      status.classList.toggle("bad", !ok);
+      if (!ok) status.textContent = n + (n === 1 ? " item" : " itens") + ". Faltam " + (need - n) + " para uma cartela " + d.size + "×" + d.size + ".";
+      else if (n === need) status.textContent = n + " itens. Todas as cartelas terão os mesmos quadrados, em ordens diferentes.";
+      else status.textContent = n + " itens. Cada cartela sorteia " + need + " deles, então cada pessoa recebe uma diferente.";
+      save.disabled = !ok;
+    }
+
+    save.addEventListener("click", function () {
+      var b = sanitize({ title: titleInput.value, size: d.size, free: d.free, eq: d.eq, items: ta.value.split(/\r?\n/) });
+      if (!b) { refresh(); return; }
+      var list = readLib(), bid;
+      if (existing) {
+        bid = existing.id;
+        list = list.map(function (x) { return x.id === bid ? Object.assign(b, { id: bid }) : x; });
+      } else {
+        bid = newId();
+        list.push(Object.assign(b, { id: bid }));
+      }
+      writeLib(list);
+      location.hash = "#/jogar/" + bid;
+    });
+
+    page(
+      backLink(),
+      titleBlock(existing ? "Editar bingo" : "Novo bingo", false, null),
+      h("div", { class: "form" },
+        h("div", { class: "field" }, h("label", { for: "f-title", text: "Título" }), titleInput),
+        h("fieldset", { class: "field" }, h("legend", { text: "Tamanho da cartela" }), h("div", { class: "segs" }, sizeRadios)),
+        h("div", { class: "field" }, freeLabel, eqLabel),
+        h("div", { class: "field" },
+          h("label", { for: "f-items", text: "Itens, um por linha" }), ta, status,
+          h("p", { class: "status", text: "Até " + MAX_ITEMS + " itens de " + MAX_LEN + " letras. Linhas repetidas contam uma vez." })),
+        h("div", { class: "row" }, save, h("a", { class: "btn", href: existing ? "#/jogar/" + existing.id : "#/", text: "Cancelar" }))));
+    refresh();
+  }
+
+  /* ---------- Tela: jogo ---------- */
+  function viewPlay(b, ctx) {
+    document.title = b.title;
+    var N = b.size, total = N * N, mid = (total - 1) / 2, need = total - (b.free ? 1 : 0);
+    setSheet(N);
+    var fp = fingerprint(b), LN = linesFor(N);
+
+    function cardFor(seed) {
+      var order = shuffledIdx(b.items.length, seed), k = 0, out = [];
+      for (var p = 0; p < total; p++) out.push(b.free && p === mid ? { free: true, t: "Livre" } : { t: b.items[order[k++]] });
+      return out;
+    }
+    function keyOf(card) { return card.map(function (c) { return c.t; }).join("|"); }
+    function freshSeed(prev) {
+      var prevKey = prev == null ? null : keyOf(cardFor(prev)), s = rand6();
+      for (var i = 0; i < 40; i++) { s = rand6(); if (keyOf(cardFor(s)) !== prevKey) return s; }
+      return s;
+    }
+    function blank() {
+      var m = []; for (var i = 0; i < total; i++) m.push(false);
+      if (b.free) m[mid] = true;
+      return m;
+    }
+
+    var seed, marks, prevLines = 0, card;
+    var saved = loadPlay(fp, total);
+    if (saved) { seed = saved.seed; marks = saved.marks.map(Boolean); } else { seed = freshSeed(null); marks = blank(); }
+    if (b.free) marks[mid] = true;
+    card = cardFor(seed);
+
+    var board = h("div", { class: "board n" + N, style: "--n:" + N, role: "group", "aria-label": "Cartela de bingo: " + b.title });
+    var cells = [];
+    for (var p = 0; p < total; p++) {
+      var btn = h("button", { type: "button", class: "cell", "aria-pressed": "false", style: "--i:" + p });
+      if (N === 3) btn.append(h("span", { class: "coord", "aria-hidden": "true", text: "ABC".charAt(p % 3) + (Math.floor(p / 3) + 1) }));
+      btn.append(h("span", { class: "txt" }));
+      btn.insertAdjacentHTML("beforeend", CHECK);
+      (function (pos, el) { el.addEventListener("click", function () { toggle(pos); }); })(p, btn);
+      board.append(btn);
+      cells.push(btn);
+    }
+
+    var countEl = h("b", { text: "0" });
+    var barFill = h("i");
+    var seedEl = h("b", { text: String(seed) });
+    var result = h("div", { class: "result", role: "status", "aria-live": "polite" });
+
+    function update(animate) {
+      var done = LN.filter(function (l) { return l.cells.every(function (i) { return marks[i]; }); });
+      var full = marks.every(Boolean);
+      var marked = marks.filter(Boolean).length - (b.free ? 1 : 0);
+      var inLine = {};
+      done.forEach(function (l) { l.cells.forEach(function (i) { inLine[i] = true; }); });
+
+      cells.forEach(function (el, pos) {
+        var c = card[pos];
+        el.querySelector(".txt").textContent = c.t;
+        el.classList.toggle("big", !c.free && c.t.length <= 3);
+        el.classList.toggle("free", !!c.free);
+        el.classList.toggle("line", !!inLine[pos]);
+        el.setAttribute("aria-pressed", marks[pos] ? "true" : "false");
+        if (c.free) el.setAttribute("aria-disabled", "true"); else el.removeAttribute("aria-disabled");
+      });
+      countEl.textContent = marked;
+      barFill.style.setProperty("--p", Math.round((marked / need) * 100));
+      seedEl.textContent = String(seed);
+
+      var html, win = false;
+      if (full) {
+        win = true;
+        html = '<span class="kicker">Cartela cheia</span><span class="detail">' +
+          (b.eq ? "Equilíbrio total · ΣF = 0 e ΣM = 0" : "Todos os quadrados marcados.") + "</span>";
+      } else if (done.length) {
+        win = true;
+        var eqs = [];
+        ["row", "col", "diag"].forEach(function (k) { if (done.some(function (l) { return l.kind === k; })) eqs.push(EQ[k]); });
+        html = '<span class="kicker">Bingo!</span><span class="detail">' + done.length + " " +
+          (done.length === 1 ? "linha fechada" : "linhas fechadas") + (b.eq ? " · " + eqs.join(", ") : "") + "</span>";
+      } else if (marked === 0) {
+        html = "Nenhum quadrado marcado ainda.";
+      } else {
+        var best = N;
+        LN.forEach(function (l) {
+          var left = l.cells.filter(function (i) { return !marks[i]; }).length;
+          if (left < best) best = left;
+        });
+        html = best === 1 ? "Falta 1 quadrado para fechar uma linha." : "Faltam " + best + " quadrados para fechar uma linha.";
+      }
+      result.className = "result" + (win ? " win" : "");
+      result.innerHTML = html; /* html montado só com números e constantes deste arquivo */
+      if (animate && done.length > prevLines) {
+        result.classList.remove("pop");
+        void result.offsetWidth;
+        result.classList.add("pop");
+      }
+      prevLines = done.length;
+    }
+
+    function toggle(pos) {
+      if (card[pos].free) return;
+      disarm();
+      marks[pos] = !marks[pos];
+      savePlay(fp, seed, marks);
+      update(true);
+    }
+
+    var btnShuffle = h("button", { type: "button", class: "btn primary", text: "Embaralhar" });
+    var btnClear = h("button", { type: "button", class: "btn", text: "Limpar marcas" });
+    var hint = h("p", { class: "hint", text: "Isso apaga as marcas desta cartela. Toque de novo para confirmar.", hidden: true });
+    var armed = null, armTimer = 0;
+    function disarm() {
+      armed = null; clearTimeout(armTimer);
+      btnShuffle.classList.remove("armed"); btnClear.classList.remove("armed");
+      btnShuffle.textContent = "Embaralhar"; btnClear.textContent = "Limpar marcas";
+      hint.hidden = true;
+    }
+    function guard(which, el, action) {
+      var any = marks.some(function (m, i) { return m && !(b.free && i === mid); });
+      if (!any || armed === which) { disarm(); action(); return; }
+      disarm();
+      armed = which;
+      el.classList.add("armed"); el.textContent = "Confirmar?"; hint.hidden = false;
+      armTimer = setTimeout(disarm, 4000);
+    }
+    btnShuffle.addEventListener("click", function () {
+      guard("shuffle", btnShuffle, function () {
+        seed = freshSeed(seed); card = cardFor(seed); marks = blank(); prevLines = 0;
+        savePlay(fp, seed, marks);
+        update(false);
+        board.classList.remove("dealing"); void board.offsetWidth; board.classList.add("dealing");
+        setTimeout(function () { board.classList.remove("dealing"); }, 900);
+      });
+    });
+    btnClear.addEventListener("click", function () {
+      guard("clear", btnClear, function () {
+        marks = blank(); prevLines = 0;
+        savePlay(fp, seed, marks);
+        update(false);
+      });
+    });
+
+    var second = [h("button", { type: "button", class: "btn", text: "Compartilhar", onclick: function () { openShare(b); } })];
+    var mine = ctx.local ? ctx.id : null;
+    if (!mine) {
+      var found = readLib().find(function (x) { return fingerprint(x) === fp; });
+      if (found) mine = found.id;
+    }
+    if (mine) {
+      second.push(h("a", { class: "btn", href: "#/editar/" + mine, text: "Editar" }));
+    } else {
+      second.push(h("button", { type: "button", class: "btn", text: "Salvar na minha lista", onclick: function (e) {
+        var list = readLib(), id = newId();
+        list.push(Object.assign({}, b, { id: id }));
+        writeLib(list);
+        toast("Salvo na sua lista");
+        e.currentTarget.replaceWith(h("a", { class: "btn", href: "#/editar/" + id, text: "Editar" }));
+      } }));
+    }
+
+    var lede = "Toque no quadrado quando acontecer. Feche uma linha e grite BINGO." + (b.free ? " O quadrado Livre já vem marcado." : "");
+    var legend = null;
+    if (b.eq) {
+      legend = h("section", { class: "legend", "aria-labelledby": "lg" },
+        h("h2", { id: "lg", text: "Como fechar" }),
+        h("dl", { html:
+          "<dt>Linha na horizontal</dt><dd>" + EQ.row + "</dd><dt>Linha na vertical</dt><dd>" + EQ.col +
+          "</dd><dt>Diagonal</dt><dd>" + EQ.diag + "</dd><dt>Cartela cheia</dt><dd>ΣF = 0 e ΣM = 0</dd>" }));
+    }
+
+    page(
+      backLink(),
+      titleBlock(b.title, b.eq, lede),
+      h("div", { class: "meta" },
+        h("div", { class: "count" }, h("span", null, "Marcados ", countEl, "/" + need), h("span", { class: "bar", "aria-hidden": "true" }, barFill)),
+        h("span", null, "Cartela nº ", seedEl)),
+      board,
+      result,
+      h("div", { class: "actions" },
+        h("div", { class: "row" }, btnShuffle, btnClear),
+        h("div", { class: "row" }, second)),
+      hint,
+      legend);
+    prevLines = LN.filter(function (l) { return l.cells.every(function (i) { return marks[i]; }); }).length;
+    update(false);
+  }
+
+  /* ---------- Telas de aviso ---------- */
+  function viewMissing() {
+    document.title = "Bingo não encontrado";
+    setSheet(3);
+    page(backLink(), titleBlock("Não achei", false, null),
+      h("div", { class: "empty" }, h("p", { text: "Este bingo não está salvo neste navegador. Peça o link de compartilhar para quem criou." })));
+  }
+  function viewInvalid() {
+    document.title = "Link inválido";
+    setSheet(3);
+    page(backLink(), titleBlock("Link inválido", false, null),
+      h("div", { class: "empty" }, h("p", { text: "Não consegui abrir este bingo. O link pode ter sido cortado ao ser enviado. Peça para enviarem de novo." })));
+  }
+  function viewLoading() {
+    setSheet(3);
+    page(titleBlock("Abrindo", false, "Preparando a cartela…"));
+  }
+
+  /* ---------- Rotas ---------- */
+  var routeToken = 0;
+  function route() {
+    var my = ++routeToken;
+    closeDialog();
+    var parts = location.hash.replace(/^#/, "").split("/").filter(Boolean);
+    var name = parts[0], arg = parts[1];
+    if (!name) return viewHome();
+    if (name === "novo") return viewEditor(null);
+    if (name === "editar" && arg) return viewEditor(arg);
+    if (name === "jogar" && arg) {
+      var b = readLib().find(function (x) { return x.id === arg; });
+      return b ? viewPlay(b, { local: true, id: b.id }) : viewMissing();
+    }
+    if (name === "b" && arg) {
+      viewLoading();
+      decodeBingo(arg).then(function (bingo) {
+        if (my !== routeToken) return;
+        if (bingo) viewPlay(bingo, { local: false }); else viewInvalid();
+      });
+      return;
+    }
+    viewHome();
+  }
+  window.addEventListener("hashchange", route);
+  window.__bingo = { encodeBingo: encodeBingo, decodeBingo: decodeBingo, sanitize: sanitize };
+  route();
+})();
+</script>
+</body>
+</html>
